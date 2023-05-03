@@ -1,10 +1,10 @@
-*.env
-*venv/
-/shelf/
-/workspace.xml
 #Ignore thumbnails created by Windows
 Thumbs.db
 #Ignore files built by Visual Studio
+*.env
+*venv/
+*/shelf/
+*.xml
 *.obj
 *.exe
 *.pdb
