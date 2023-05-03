@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from flask_cors import CORS, cross_origin
 import os
 from dotenv import load_dotenv
+from models import TestCases, Tickets, TestRuns
 load_dotenv()
 app = Flask(__name__)
 cors = CORS(app)
@@ -24,47 +25,6 @@ engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
 
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
-
-
-# TestCases model
-class TestCases(Base):
-    __tablename__ = 'testcases'
-    id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False, unique=True)
-
-    def __init__(self, name):
-        self.name = name
-
-class TestRuns(Base):
-    __tablename__ = 'testruns'
-    id = Column(Integer, primary_key=True, nullable=False, unique=True)
-    version = Column(Integer, nullable=False)
-    tcID = Column(Integer, ForeignKey('testcases.id'), nullable=False)
-    success = Column(Integer)
-
-    def __init__(self, version, tcid, success):
-        self.version = version
-        self.tcID = tcid
-        self.success = success
-
-
-class Tickets(Base):
-    __tablename__ = 'tickets'
-    id = Column(Integer, primary_key=True, nullable=False, unique=True)
-    #version = Column(Integer, nullable=False)
-    tcID = Column(Integer, ForeignKey('testcases.id'), nullable=False)
-    ticketName=Column(String(200),unique=True,nullable=False)
-    ticketLink = Column(String(200))
-    resolved=Column(Integer)
-
-    def __init__(self, tcid, ticketlink,ticketname,resolved):
-        #self.version = version
-        self.tcID = tcid
-        self.ticketLink = ticketlink
-        self.ticketName=ticketname
-        self.resolved=resolved
-
-
 
 Base.metadata.create_all(engine)
 
