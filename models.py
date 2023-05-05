@@ -38,3 +38,18 @@ class Tickets(Base):
         self.ticketLink = ticketlink
         self.ticketName=ticketname
         self.resolved=resolved
+
+class Users(Base):
+    __tablename__ = 'users'
+    id=Column(Integer,primary_key=True,nullable=False,unique=True)
+    publicId=Column(String(250),unique=True)
+    username=Column(String(50),unique=True,nullable=False)
+    password=Column(String(100),nullable=False)
+    admin=Column(Integer)
+
+    def __init__(self , publicId, username, password,admin):
+        # self.version = version
+        self.publicId = publicId
+        self.username = username
+        self.password = password
+        self.admin = admin

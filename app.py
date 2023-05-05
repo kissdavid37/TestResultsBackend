@@ -1,38 +1,90 @@
+import uuid
+import jwt
 from flask import Flask, jsonify, make_response, request
 from sqlalchemy import *
-from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 from flask_cors import CORS, cross_origin
 import os
 from dotenv import load_dotenv
-from models import TestCases, Tickets, TestRuns
+from models import TestCases, Tickets, TestRuns,Users ,Base
+from functools import wraps
+from werkzeug.security import generate_password_hash,check_password_hash
+import datetime
+
 load_dotenv()
 app = Flask(__name__)
 cors = CORS(app)
-# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'  # Az adatbázis URI-ja, itt SQLite-ot használunk
 
-server = 'DESKTOP-A8LE02Q\SQLEXPRESS'
-database = 'testruns'
-trusted_connection = 'Yes'
-
-# Az adatbázis kapcsolat beállítása Windows autentikációval
-#app.config['SQLALCHEMY_DATABASE_URI'] = f'mssql:///?odbc_connect=DRIVER={{ODBC Driver 17 for SQL Server}};' \
-  #                                      f'SERVER={server};' \
-   #                                     f'DATABASE={database};' \
-    #                                    f'Trusted_Connection={trusted_connection};'
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
 
-Base = declarative_base()
 Session = sessionmaker(bind=engine)
-
 Base.metadata.create_all(engine)
 
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token=None
+        s=Session()
+        if 'x-access-token' in request.headers:
+            token=request.headers['x-access-token']
 
-# Alkalmazás útválasztók
-@app.route('/testcases')
+        if not token:
+            return jsonify({'message':'A valid token is missing'})
+        try:
+            data=jwt.decode(token,os.getenv('SECRET_KEY'),algorithms=['HS256'])
+            current_user=s.query(Users).filter_by(publicId=data['publicId']).first()
+            s.close()
+        except:
+            s.close()
+            return jsonify({'message':'token is invalid'},401)
+        return f(current_user, *args, **kwargs)
+    return decorated
+
+@app.route('/register',methods=['POST'])
+def register():
+    s=Session()
+    data=request.get_json()
+    username=data['username']
+    passowrd=data['password']
+    if not username or not passowrd:
+        return make_response('Credentials cannot be empty!', 401)
+    hashed_password=generate_password_hash(data['password'],method='sha256')
+    new_user=Users(publicId=(uuid.uuid4()), username=data['username'],password=hashed_password,admin=0)
+    s.add(new_user)
+    s.commit()
+    s.close()
+    return data
+
+@app.route('/login', methods=['POST'])
 @cross_origin()
-def get_all_testcase():
+def login():
+    s=Session()
+
+    data=request.get_json()
+    username=data['username']
+    password=data['password']
+
+    if not username or not password:
+        s.close()
+        return make_response('Could not verify', 401)
+
+    user=s.query(Users).filter_by(username=username).first()
+    s.close()
+
+    if not user:
+        return make_response('Username is incorrect', 401)
+
+    if check_password_hash(user.password, password):
+        token = jwt.encode({'publicId': user.publicId,'admin':user.admin, 'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=1)}, os.getenv('SECRET_KEY'))
+        return jsonify({'token': token})
+
+    return make_response('Bad password', 402)
+
+@app.route('/testcases')
+@token_required
+@cross_origin()
+def get_all_testcase(current_user):
     s = Session()
     testcases = s.query(TestCases).order_by(TestCases.id).all()
     output = []
@@ -47,7 +99,8 @@ def get_all_testcase():
 
 @app.route('/testcases/<testcase_id>')
 @cross_origin()
-def get_testcase_by_id(testcase_id):
+@token_required
+def get_testcase_by_id(testcase_id,current_user):
     s = Session()
     testcase = s.query(TestCases).filter_by(id=testcase_id).first()
     if not testcase:
@@ -61,8 +114,9 @@ def get_testcase_by_id(testcase_id):
 
 
 @app.route('/testcases', methods=['POST'])
+@token_required
 @cross_origin()
-def create_testcase():
+def create_testcase(current_user):
     data = request.get_json()
     s = Session()
     new_testcase = TestCases(name=data['name'])
@@ -79,8 +133,9 @@ def create_testcase():
 
 
 @app.route('/testcases', methods=['DELETE'])
+@token_required
 @cross_origin(methods=['DELETE'])
-def delete_testcase():
+def delete_testcase(current_user):
     data = request.get_json()
     s = Session()
     testcaseid = data['id']
@@ -99,8 +154,9 @@ def delete_testcase():
 
 
 @app.route('/testruns', methods=['POST'])
+@token_required
 @cross_origin()
-def create_testrun():
+def create_testrun(current_user):
     s = Session()
     data = request.get_json()
     queriedId = s.query(TestCases.id).filter_by(name=data['name'])
@@ -118,8 +174,9 @@ def create_testrun():
 
 
 @app.route('/testruns', methods=['PUT'])
+@token_required
 @cross_origin()
-def update_testrun():
+def update_testrun(current_user):
     data = request.get_json()
     s = Session()
     version = data['version']
@@ -137,8 +194,9 @@ def update_testrun():
 
 
 @app.route('/testruns')
+@token_required
 @cross_origin()
-def get_testrun():
+def get_testrun(current_user):
     output = []
     s = Session()
     testruns = s.query(TestRuns.version, TestCases.name, TestRuns.success, TestRuns.tcID).join(TestCases).order_by(
@@ -157,7 +215,8 @@ def get_testrun():
     return output
 
 @app.route('/tickets/<testcase_id>')
-def get_tickets_by_testcase(testcase_id):
+@token_required
+def get_tickets_by_testcase(testcase_id,current_user):
     output=[]
     s=Session()
     #tickets=s.query(Tickets.version,Tickets.tcID,Tickets.ticketLink).join(TestCases).where(and_(Tickets.version==version_nr,TestCases.id==testcase_id))
@@ -177,7 +236,8 @@ def get_tickets_by_testcase(testcase_id):
     return output
 
 @app.route('/tickets/<testcase_id>', methods=['POST'])
-def create_ticket(testcase_id):
+@token_required
+def create_ticket(testcase_id,current_user):
     data=request.get_json()
     s=Session()
     testcase=s.query(TestCases.id).where(TestCases.id==data['tcID']).first()
@@ -196,7 +256,8 @@ def create_ticket(testcase_id):
     return data
 
 @app.route('/tickets/<testcase_id>', methods=['PUT'])
-def update_ticket(testcase_id):
+@token_required
+def update_ticket(testcase_id,current_user):
     data=request.get_json()
     resolved=data['resolved']
     s=Session()
