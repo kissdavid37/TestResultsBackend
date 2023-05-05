@@ -34,16 +34,21 @@ def token_required(f):
         try:
             data=jwt.decode(token,os.getenv('SECRET_KEY'),algorithms=['HS256'])
             current_user=s.query(Users).filter_by(publicId=data['publicId']).first()
+            s.close()
         except:
+            s.close()
             return jsonify({'message':'token is invalid'},401)
         return f(current_user, *args, **kwargs)
-    print(decorated)
     return decorated
 
 @app.route('/register',methods=['POST'])
 def register():
     s=Session()
     data=request.get_json()
+    username=data['username']
+    passowrd=data['password']
+    if not username or not passowrd:
+        return make_response('Credentials cannot be empty!', 401)
     hashed_password=generate_password_hash(data['password'],method='sha256')
     new_user=Users(publicId=(uuid.uuid4()), username=data['username'],password=hashed_password,admin=0)
     s.add(new_user)
@@ -61,18 +66,20 @@ def login():
     password=data['password']
 
     if not username or not password:
-        return make_response('Could not verify', 401, {'WWW-Authenticate': 'Basic realm="Login required!"'})
+        s.close()
+        return make_response('Could not verify', 401)
 
     user=s.query(Users).filter_by(username=username).first()
+    s.close()
 
     if not user:
-        return make_response('Could not verify', 401, {'WWW-Authenticate': 'Basic realm="Bad credentials!"'})
+        return make_response('Username is incorrect', 401)
 
     if check_password_hash(user.password, password):
-        token = jwt.encode({'publicId': user.publicId, 'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=240)}, os.getenv('SECRET_KEY'))
+        token = jwt.encode({'publicId': user.publicId,'admin':user.admin, 'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=1)}, os.getenv('SECRET_KEY'))
         return jsonify({'token': token})
 
-    return make_response('Bad password', 402, {'WWWW-Authenticate': 'Basic realm="Login required!"'})
+    return make_response('Bad password', 402)
 
 @app.route('/testcases')
 @token_required
