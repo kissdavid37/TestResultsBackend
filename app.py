@@ -46,8 +46,11 @@ def register():
     s=Session()
     data=request.get_json()
     username=data['username']
-    passowrd=data['password']
-    if not username or not passowrd:
+    password=data['password']
+    confirm_password=data['confirm']
+    if password != confirm_password:
+        return make_response('Passwords do not match',400)
+    if not username or not password:
         return make_response('Credentials cannot be empty!', 401)
     hashed_password=generate_password_hash(data['password'],method='sha256')
     new_user=Users(publicId=(uuid.uuid4()), username=data['username'],password=hashed_password,admin=0)
