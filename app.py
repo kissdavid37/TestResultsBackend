@@ -279,4 +279,4 @@ if __name__ == '__main__':
     # Adatbázis táblák létrehozása
 
     # Flask alkalmazás futtatása
-    app.run(debug=True)
+    app.run(debug=True,host='0.0.0.0')
