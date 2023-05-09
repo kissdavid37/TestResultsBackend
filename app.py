@@ -79,7 +79,7 @@ def login():
         return make_response('Username is incorrect', 401)
 
     if check_password_hash(user.password, password):
-        token = jwt.encode({'publicId': user.publicId,'admin':user.admin, 'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=1)}, os.getenv('SECRET_KEY'))
+        token = jwt.encode({'publicId': user.publicId,'admin':user.admin, 'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=120)}, os.getenv('SECRET_KEY'))
         return jsonify({'token': token})
 
     return make_response('Bad password', 402)
@@ -219,14 +219,11 @@ def get_testrun(current_user):
 
 @app.route('/tickets/<testcase_id>')
 @token_required
-def get_tickets_by_testcase(testcase_id,current_user):
+def get_tickets_by_testcase(current_user,testcase_id):
     output=[]
     s=Session()
     #tickets=s.query(Tickets.version,Tickets.tcID,Tickets.ticketLink).join(TestCases).where(and_(Tickets.version==version_nr,TestCases.id==testcase_id))
     tickets=s.query(Tickets.tcID,Tickets.ticketLink,Tickets.ticketName,Tickets.resolved).join(TestCases).where(TestCases.id==testcase_id)
-    if not tickets:
-        s.close()
-        return make_response('No Tickets for this testcase', 404)
     for ticket in tickets:
         ticket_data={}
         #ticket_data['version']=ticket.version
@@ -236,31 +233,37 @@ def get_tickets_by_testcase(testcase_id,current_user):
         ticket_data['resolved']=ticket.resolved
         output.append(ticket_data)
     s.close()
+    print(output)
     return output
 
 @app.route('/tickets/<testcase_id>', methods=['POST'])
 @token_required
-def create_ticket(testcase_id,current_user):
+def create_ticket(current_user,testcase_id):
     data=request.get_json()
     s=Session()
-    testcase=s.query(TestCases.id).where(TestCases.id==data['tcID']).first()
+    testcase=s.query(TestCases.id).where(TestCases.id==testcase_id).first()
     if testcase is None:
         s.close()
         return make_response('Testcase with this ID does not exists', 409)
-    if s.query(Tickets.tcID,Tickets.ticketLink).where(and_(Tickets.tcID==data['tcID'],Tickets.ticketLink==data['ticketLink'])).first() is not None:
+    
+    if s.query(Tickets.tcID,Tickets.ticketLink).where(and_(Tickets.tcID==testcase_id,Tickets.ticketLink==data['ticketLink'])).first() is not None:
         s.close()
         return make_response('This ticket already exists', 409)
-    new_ticket=Tickets(tcid=data['tcID'],ticketname=data['ticketName'],ticketlink=data['ticketLink'],resolved=0)
+    
+    new_ticket=Tickets(tcid=testcase_id,ticketname=data['ticketName'],ticketlink=data['ticketLink'],resolved=0)
+    print('itt')
     s.add(new_ticket)
     s.commit()
+
     response=jsonify(data)
     response.headers.add('Access-Control-Allow-Origin', '*')
     s.close()
+    print(data)
     return data
 
 @app.route('/tickets/<testcase_id>', methods=['PUT'])
 @token_required
-def update_ticket(testcase_id,current_user):
+def update_ticket(current_user,testcase_id):
     data=request.get_json()
     resolved=data['resolved']
     s=Session()
