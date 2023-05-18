@@ -162,14 +162,28 @@ def delete_testcase(current_user):
 def create_testrun(current_user):
     s = Session()
     data = request.get_json()
+    print(data['name'])
     queriedId = s.query(TestCases.id).filter_by(name=data['name'])
     new_testrun = TestRuns(version=data['version'], tcid=queriedId, success=0)
-    if s.query(TestCases).filter_by(name=data['name']).first() is None:
+
+    if data['name'] is None:
+       testcases= s.query(TestCases).all()
+       testruns=[]
+       for testcase in testcases:
+           new_testrun=TestRuns(version=data['version'],tcid=testcase.id,success=0)
+           testruns.append(new_testrun)
+       s.bulk_save_objects(testruns)
+       s.commit()
+
+    elif s.query(TestCases).filter_by(name=data['name']).first() is None:
         return make_response('The selected testcase does not exist', 409)
-    if s.query(TestRuns).filter_by(version=data['version']).filter_by(tcID=queriedId).first() is not None:
+    
+    elif s.query(TestRuns).filter_by(version=data['version']).filter_by(tcID=queriedId).first() is not None:
         return make_response('This testrun already contains this testcase', 409, )
-    s.add(new_testrun)
-    s.commit()
+    
+    else:
+        s.add(new_testrun)
+        s.commit()
     response = jsonify(data)
     response.headers.add('Access-Control-Allow-Origin', '*')
     s.close()
